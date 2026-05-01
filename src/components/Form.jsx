@@ -177,10 +177,11 @@ function Form({
                                     setErrorMsg(
                                         "An error occurred while verifying your payment. Please contact administrator."
                                     );
+                                    setLoading(false);
                                 });
                         },
                         prefill: {
-                            name: athleteFormData.athleteName,
+                            name: athleteFormData.athleteName || athleteFormData.playerName || "",
                             email: athleteFormData.email,
                             contact: athleteFormData.mob,
                         },
@@ -190,9 +191,15 @@ function Form({
                         theme: {
                             color: "#3399cc",
                         },
+                        modal: {
+                            ondismiss: function () {
+                                setLoading(false);
+                                setErrorMsg("Payment was cancelled. You can try again.");
+                            },
+                        },
                     };
 
-                    const rzp1 = new Razorpay(options);
+                    const rzp1 = new window.Razorpay(options);
                     rzp1.open();
                 })
                 .catch((err) => {
@@ -426,8 +433,8 @@ function Form({
                                     {errorMsg}
                                 </p>
                                 <p className="text-gray-800 text-xs mt-1">
-                                    If issue persists, please contaact
-                                    administator
+                                    If issue persists, please contact
+                                    administrator
                                 </p>
                             </div>
                         )}
