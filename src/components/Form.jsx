@@ -146,69 +146,113 @@ function Form({
                 .then((res) => {
                     const { orderId, amount, currency, userId } = res.data;
 
-                    const options = {
-                        key: import.meta.env.VITE_KEY_RAZORPAY,
-                        amount: amount,
-                        currency: currency,
-                        order_id: orderId,
-                        handler: function (response) {
-                            axios
-                                .post(
-                                    `${BACKEND_URL}${backendPaymentVerifyUrl}`,
-                                    {
-                                        razorpay_order_id:
-                                            response.razorpay_order_id,
-                                        razorpay_payment_id:
-                                            response.razorpay_payment_id,
-                                        razorpay_signature:
-                                            response.razorpay_signature,
-                                        userId: userId,
-                                    }
-                                )
-                                .then((verifyRes) => {
-                                    console.log(verifyRes);
-                                    setRegData(verifyRes);
-                                    setRegSuccess(true);
+                    // Function to open Razorpay checkout
+                    const openRazorpay = () => {
+                        // Check if Razorpay script is loaded
+                        if (typeof window.Razorpay === 'undefined') {
+                            setErrorMsg("Payment gateway is loading. Please try again in a moment.");
+                            setLoading(false);
+                            return;
+                        }
 
-                                    setLoading(false);
-                                })
-                                .catch((err) => {
-                                    console.error(err);
-                                    setErrorMsg(
-                                        "An error occurred while verifying your payment. Please contact administrator."
-                                    );
-                                    setLoading(false);
-                                });
-                        },
-                        prefill: {
-                            name: athleteFormData.athleteName || athleteFormData.playerName || "",
-                            email: athleteFormData.email,
-                            contact: athleteFormData.mob,
-                        },
-                        notes: {
-                            address: athleteFormData.address,
-                        },
-                        theme: {
-                            color: "#3399cc",
-                        },
-                        modal: {
-                            ondismiss: function () {
-                                setLoading(false);
-                                setErrorMsg("Payment was cancelled. You can try again.");
+                        const options = {
+                            key: import.meta.env.VITE_KEY_RAZORPAY,
+                            amount: amount,
+                            currency: currency,
+                            order_id: orderId,
+                            handler: function (response) {
+                                axios
+                                    .post(
+                                        `${BACKEND_URL}${backendPaymentVerifyUrl}`,
+                                        {
+                                            razorpay_order_id:
+                                                response.razorpay_order_id,
+                                            razorpay_payment_id:
+                                                response.razorpay_payment_id,
+                                            razorpay_signature:
+                                                response.razorpay_signature,
+                                            userId: userId,
+                                        }
+                                    )
+                                    .then((verifyRes) => {
+                                        console.log(verifyRes);
+                                        setRegData(verifyRes);
+                                        setRegSuccess(true);
+
+                                        setLoading(false);
+                                    })
+                                    .catch((err) => {
+                                        console.error("Payment verification error:", err);
+                                        const errorMsg = err.response?.data?.message ||
+                                            "Payment verification failed. Please contact administrator with your payment ID.";
+                                        setErrorMsg(errorMsg);
+                                        setLoading(false);
+                                    });
                             },
-                        },
+                            prefill: {
+                                name: athleteFormData.athleteName || athleteFormData.playerName || "",
+                                email: athleteFormData.email,
+                                contact: athleteFormData.mob,
+                            },
+                            notes: {
+                                address: athleteFormData.address,
+                            },
+                            theme: {
+                                color: "#3399cc",
+                            },
+                            modal: {
+                                ondismiss: function () {
+                                    setLoading(false);
+                                    setErrorMsg("Payment was cancelled. You can try again.");
+                                },
+                            },
+                        };
+
+                        try {
+                            const rzp1 = new window.Razorpay(options);
+                            rzp1.open();
+                        } catch (error) {
+                            console.error("Razorpay initialization error:", error);
+                            setErrorMsg("Failed to open payment gateway. Please refresh and try again.");
+                            setLoading(false);
+                        }
                     };
 
-                    const rzp1 = new window.Razorpay(options);
-                    rzp1.open();
+                    // If Razorpay not loaded yet, wait and retry
+                    if (typeof window.Razorpay === 'undefined') {
+                        let retryCount = 0;
+                        const maxRetries = 10;
+                        const retryInterval = setInterval(() => {
+                            retryCount++;
+                            if (typeof window.Razorpay !== 'undefined') {
+                                clearInterval(retryInterval);
+                                openRazorpay();
+                            } else if (retryCount >= maxRetries) {
+                                clearInterval(retryInterval);
+                                setErrorMsg("Payment gateway failed to load. Please check your internet connection and try again.");
+                                setLoading(false);
+                            }
+                        }, 300);
+                    } else {
+                        openRazorpay();
+                    }
                 })
                 .catch((err) => {
-                    console.error(err);
+                    console.error("Registration/Order creation error:", err);
 
-                    setErrorMsg(
-                        "An error occurred while processing your request. Please try again later."
-                    );
+                    let errorMessage = "An error occurred while processing your request.";
 
+                    if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED' || err.message === 'Network Error') {
+                        errorMessage = "Cannot connect to server. Please check your internet connection and try again.";
+                    } else if (err.code === 'ERR_CONNECTION_TIMED_OUT') {
+                        errorMessage = "Server connection timed out. The server may be down or unreachable. Please try again later.";
+                    } else if (err.response) {
+                        // Server responded with error
+                        errorMessage = err.response.data?.error || err.response.data?.message ||
+                            `Server error (${err.response.status}). Please try again later.`;
+                    }
+
+                    setErrorMsg(errorMessage);
                     setLoading(false);
                 });
         } else {
@@ -469,10 +513,19 @@ function Form({
                     Download ID Card
                 </a> */}
 
-                <p className="text-green-600 text-sm font-semibold text-center max-w-lg m-auto mt-5">
-                    Admin will verify your documents and you will receive an
-                    email on {regData?.data?.email}
-                </p>
+                {regData?.data?.licenceEmailSent ? (
+                    <p className="text-green-600 text-sm font-semibold text-center max-w-lg m-auto mt-5">
+                        Your payment was successful and your JKTA licence card
+                        has been emailed to {regData?.data?.email}. Please also
+                        check your spam or promotions folder.
+                    </p>
+                ) : (
+                    <p className="text-amber-600 text-sm font-semibold text-center max-w-lg m-auto mt-5">
+                        Your payment was successful on {regData?.data?.email}.
+                        Your licence card is being prepared and will be emailed
+                        shortly. If it does not arrive, our team will resend it.
+                    </p>
+                )}
                 <p className="text-gray-800 text-sm font-semibold text-center max-w-lg m-auto mt-5">
                     Kindly note down the tracking ID for future reference. Same
                     has been sent to your email.
