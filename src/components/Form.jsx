@@ -103,6 +103,14 @@ function Form({
             }
         });
 
+        // The profile picture is captured by ProfilePictureUpload, not by a
+        // DocumentDetails entry, so it is not covered by the checks above.
+        // Without it the backend cannot generate the licence card and the
+        // player would pay but never receive one.
+        if (!athleteFormData.photo) {
+            errors.photo = "Profile Picture is required";
+        }
+
         fields.forEach((fieldGroup) => {
             fieldGroup.fields.forEach((field) => {
                 const value = athleteFormData[field.name];
@@ -410,6 +418,7 @@ function Form({
                                     <ProfilePictureUpload
                                         setAthleteFormData={setAthleteFormData}
                                         loading={loading}
+                                        error={formErrors.photo}
                                     />
                                 </span>
                                 {DocumentDetails.map((field) => (
